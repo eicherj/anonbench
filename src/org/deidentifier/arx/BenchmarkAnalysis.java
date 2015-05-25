@@ -110,7 +110,7 @@ public class BenchmarkAnalysis {
         CSVFile csv = new CSVFile(header1, header2);
         
         // For each criterion
-        for (BenchmarkCriterion[] criteria : BenchmarkSetup.getCriteria()) {
+        for (BenchmarkCriterion[] criteria : BenchmarkSetup.getPrivacyCriteria()) {
             
             // The current line
             String scriteria = Arrays.toString(criteria);

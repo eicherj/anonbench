@@ -22,10 +22,15 @@ package org.deidentifier.arx;
 
 import java.io.IOException;
 
+import org.deidentifier.arx.ARXPopulationModel.Region;
 import org.deidentifier.arx.AttributeType.Hierarchy;
+import org.deidentifier.arx.BenchmarkSetup.BenchmarkAlgorithm;
+import org.deidentifier.arx.BenchmarkSetup.BenchmarkCriterion;
+import org.deidentifier.arx.BenchmarkSetup.BenchmarkDataset;
 import org.deidentifier.arx.criteria.DPresence;
 import org.deidentifier.arx.criteria.HierarchicalDistanceTCloseness;
 import org.deidentifier.arx.criteria.KAnonymity;
+import org.deidentifier.arx.criteria.PopulationUniqueness;
 import org.deidentifier.arx.criteria.RecursiveCLDiversity;
 import org.deidentifier.arx.metric.Metric;
 
@@ -34,6 +39,17 @@ import org.deidentifier.arx.metric.Metric;
  * @author Fabian Prasser
  */
 public class BenchmarkSetup {
+
+    /**
+     * Returns all suppression values
+     * @return
+     */
+    public static double[] getSuppressionValues() {
+        return new double[] {
+                0.0,
+                1.0
+        };
+    }
 
     public static enum BenchmarkAlgorithm {
         HEURAKLES {
@@ -81,6 +97,27 @@ public class BenchmarkSetup {
                 return "d";
             }
         },
+        RISK_BASED {
+            @Override
+            public String toString() {
+                return "r";
+            }
+        },
+    }
+
+    public static enum BenchmarkMetric {
+        AECS {
+            @Override
+            public String toString() {
+                return "AECS";
+            }
+        },
+        LOSS {
+            @Override
+            public String toString() {
+                return "Loss";
+            }
+        }
     }
 
     public static enum BenchmarkDataset {
@@ -135,11 +172,22 @@ public class BenchmarkSetup {
      * @return
      * @throws IOException
      */
-    public static ARXConfiguration getConfiguration(BenchmarkDataset dataset, BenchmarkCriterion... criteria) throws IOException {
+    public static ARXConfiguration
+            getConfiguration(BenchmarkCriterion[] criteria,
+                             BenchmarkDataset dataset,
+                             BenchmarkMetric metric,
+                             double suppression, BenchmarkAlgorithm benchmarkAlgorithm, boolean useDecisionMetric) throws IOException {
 
         ARXConfiguration config = ARXConfiguration.create();
-        config.setMetric(Metric.createEntropyMetric(true));
-        config.setMaxOutliers(0d);
+        Metric<?> _metric = null;
+        if (useDecisionMetric) {
+            _metric = BenchmarkSetup.getDecisionMetric(benchmarkAlgorithm, metric);
+        }
+        else {
+            _metric = BenchmarkSetup.getMetric(metric);
+        }
+        config.setMetric(_metric);
+        config.setMaxOutliers(suppression);
 
         for (BenchmarkCriterion c : criteria) {
             switch (c) {
@@ -157,6 +205,9 @@ public class BenchmarkSetup {
                 sensitive = getSensitiveAttribute(dataset);
                 config.addCriterion(new HierarchicalDistanceTCloseness(sensitive, 0.2d, getHierarchy(dataset, sensitive)));
                 break;
+            case RISK_BASED:
+                config.addCriterion(new PopulationUniqueness(0.01d, ARXPopulationModel.create(Region.USA)));
+                break;
             default:
                 throw new RuntimeException("Invalid criterion");
             }
@@ -168,25 +219,13 @@ public class BenchmarkSetup {
      * Returns all sets of criteria
      * @return
      */
-    public static BenchmarkCriterion[][] getCriteria() {
-        BenchmarkCriterion[][] result = new BenchmarkCriterion[11][];
+    public static BenchmarkCriterion[][] getPrivacyCriteria() {
+        BenchmarkCriterion[][] result = new BenchmarkCriterion[5][];
         result[0] = new BenchmarkCriterion[] { BenchmarkCriterion.K_ANONYMITY };
         result[1] = new BenchmarkCriterion[] { BenchmarkCriterion.L_DIVERSITY };
         result[2] = new BenchmarkCriterion[] { BenchmarkCriterion.T_CLOSENESS };
         result[3] = new BenchmarkCriterion[] { BenchmarkCriterion.D_PRESENCE };
-        result[4] = new BenchmarkCriterion[] { BenchmarkCriterion.K_ANONYMITY, BenchmarkCriterion.L_DIVERSITY };
-        result[5] = new BenchmarkCriterion[] { BenchmarkCriterion.K_ANONYMITY, BenchmarkCriterion.T_CLOSENESS };
-        result[6] = new BenchmarkCriterion[] { BenchmarkCriterion.K_ANONYMITY, BenchmarkCriterion.D_PRESENCE };
-        result[7] = new BenchmarkCriterion[] { BenchmarkCriterion.D_PRESENCE, BenchmarkCriterion.L_DIVERSITY };
-        result[8] = new BenchmarkCriterion[] { BenchmarkCriterion.D_PRESENCE, BenchmarkCriterion.T_CLOSENESS };
-        result[9] = new BenchmarkCriterion[] {
-                BenchmarkCriterion.K_ANONYMITY,
-                BenchmarkCriterion.D_PRESENCE,
-                BenchmarkCriterion.L_DIVERSITY };
-        result[10] = new BenchmarkCriterion[] {
-                BenchmarkCriterion.K_ANONYMITY,
-                BenchmarkCriterion.D_PRESENCE,
-                BenchmarkCriterion.T_CLOSENESS };
+        result[3] = new BenchmarkCriterion[] { BenchmarkCriterion.RISK_BASED };
         return result;
     }
 
@@ -383,6 +422,48 @@ public class BenchmarkSetup {
             return "EDUC";
         default:
             throw new RuntimeException("Invalid dataset");
+        }
+    }
+
+    /**
+     * Returns all metrics
+     * @return
+     */
+    public static BenchmarkMetric[] getMetrics() {
+        return new BenchmarkMetric[] {
+                BenchmarkMetric.AECS,
+                BenchmarkMetric.LOSS
+        };
+    }
+
+    /**
+     * Returns the decision metric for this algorithm.
+     * @param algorithm
+     * @param metric
+     */
+    public static Metric<?> getDecisionMetric(BenchmarkAlgorithm algorithm, BenchmarkMetric metric) {
+
+        switch (algorithm) {
+        case HEURAKLES:
+            return getMetric(metric);
+        case DATAFLY:
+            return Metric.createDataFlyMetric();
+        case IMPROVED_GREEDY:
+            return Metric.createImprovedGreedyMetric();
+        default:
+            throw new RuntimeException("No decision metric for algorithm " + algorithm + " defined.");
+
+        }
+    }
+
+    public static Metric<?> getMetric(BenchmarkMetric metric) {
+        switch (metric) {
+        case LOSS:
+            return Metric.createLossMetric();
+        case AECS:
+            return Metric.createAECSMetric();
+        default:
+            throw new RuntimeException("Invalid decision metric.");
         }
     }
 }

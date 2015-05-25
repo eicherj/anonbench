@@ -27,6 +27,7 @@ import java.util.Arrays;
 import org.deidentifier.arx.BenchmarkSetup.BenchmarkAlgorithm;
 import org.deidentifier.arx.BenchmarkSetup.BenchmarkCriterion;
 import org.deidentifier.arx.BenchmarkSetup.BenchmarkDataset;
+import org.deidentifier.arx.BenchmarkSetup.BenchmarkMetric;
 
 import de.linearbits.subframe.Benchmark;
 import de.linearbits.subframe.analyzer.ValueBuffer;
@@ -57,28 +58,34 @@ public class BenchmarkMain {
 
         BenchmarkDriver driver = new BenchmarkDriver(BENCHMARK);
 
-        // For each algorithm
-        for (BenchmarkAlgorithm algorithm : BenchmarkSetup.getAlgorithms()) {
+        // For each combination of criteria
+        for (BenchmarkCriterion[] criteria : BenchmarkSetup.getPrivacyCriteria()) {
 
             // For each dataset
-            for (BenchmarkDataset data : BenchmarkSetup.getDatasets()) {
+            for (BenchmarkDataset dataset : BenchmarkSetup.getDatasets()) {
 
-                // For each combination of criteria
-                for (BenchmarkCriterion[] criteria : BenchmarkSetup.getCriteria()) {
+                // For each metric
+                for (BenchmarkMetric metric : BenchmarkSetup.getMetrics()) {
 
-                    // Warmup run
-                    driver.anonymize(data, criteria, algorithm, true);
+                    // For each suppression
+                    for (double suppression : BenchmarkSetup.getSuppressionValues()) {
 
-                    // Print status info
-                    System.out.println("Running: " + algorithm.toString() + " / " + data.toString() + " / " + Arrays.toString(criteria));
+                        // For each algorithm
+                        for (BenchmarkAlgorithm algorithm : BenchmarkSetup.getAlgorithms()) {
 
-                    // Benchmark
-                    BENCHMARK.addRun(algorithm.toString(), data.toString(), Arrays.toString(criteria));
+                            // Print status info
+                            System.out.println("Running: " + algorithm.toString() + " / " + dataset.toString() + " / " +
+                                               Arrays.toString(criteria));
 
-                    driver.anonymize(data, criteria, algorithm, false);
+                            // Benchmark
+                            BENCHMARK.addRun(algorithm.toString(), dataset.toString(), Arrays.toString(criteria));
 
-                    // Write results incrementally
-                    BENCHMARK.getResults().write(new File("results/results.csv"));
+                            driver.anonymize(criteria, dataset, metric, suppression, algorithm);
+
+                            // Write results incrementally
+                            BENCHMARK.getResults().write(new File("results/results.csv"));
+                        }
+                    }
                 }
             }
         }
